@@ -11,6 +11,7 @@ from geometry_msgs.msg import Pose, PoseArray, PointStamped, Quaternion, Point, 
 from sensor_msgs.msg import LaserScan
 import tf
 import random
+from random import gauss
 import math as m
 import numpy as np
 from copy import deepcopy
@@ -38,8 +39,7 @@ class Robot():
 		rospy.Subscriber("/base_scan", LaserScan, self.handleLaserMessage)
 
 		self.lMapPublisher = rospy.Publisher("/likelihood_field", OccupancyGrid, queue_size=10, latch=True)
-		self.particles= []
-		self.particleArray= []
+		self.particleArray = []
 		self.angleMin = 0
 		self.poseArray = PoseArray() 	
 		self.increment = 0	
@@ -88,7 +88,7 @@ class Robot():
 		self.poseArray.header.stamp = rospy.Time.now()
 		self.poseArray.header.frame_id = 'map'
 		self.poseArray.poses = []
-
+		self.particle = []
 		self.numP = self.config["num_particles"]
 		for i in range(self.numP ):
 			#self.particle is an array 
@@ -147,60 +147,61 @@ class Robot():
 				totalLaserAngle = self.particle[p][2] + self.rLaserAngle
 				rangeX = particle[p][0] + self.laserVals[l]*m.cos(totalLaserAngle) 		
 				rangeY = particle[p][1] + self.laserVals[l]*m.sin(totalLaserAngle) 		
-
 	def moveParticles(self):	
 		self.moveList = self.config["move_list"]		
-		print "movelist"	
-		print self.moveList	
 		for i in range (len (self.moveList)):
 			
 			self.mAngle = self.moveList[i][0]
 			self.mDist = self.moveList[i][1]
 			self.mSteps = self.moveList[i][2]
-			print "self.mAngle"
-			print (self.mAngle)
 
-			with open ("log1.txt", 'a') as infile:
-				infile.write(str(self.mAngle))
+			with open ("moveparticleslog.txt", 'a') as infile:
+				infile.write(str(self.moveList))
 			#move robot 
 			hf.move_function( m.radians( self.mAngle ), float(0.0)) 
-			print ( "move function")
 			#move the particles and add noise only for the first move	
-			for p in range(len (self.particles)): 	
-				self.particles[p][2] += m.radians(self.mAngle)	
+			for p in range(len (self.particleArray)): 	
+				self.particleArray[p][2] += m.radians(self.mAngle)	
 				if i == 0:	
-					self.particles[p][2] += random.guass(0, self.config["first_move_sigma_angle"])
+					self.particleArray[p][2] += random.gauss(0, self.config["first_move_sigma_angle"])
 			#move particles
 			for j in range (self.mSteps):	
 				hf.move_function(0, self.mDist)
-				for k in range (len (self.particles) ):		
-					print "k" 
-					print k
-					self.particles[k][0] = self.particles[k][0] + self.mDist*m.cos(self.particles[k][2])
-					self.particles[k][1] = self.particles[k][1] + self.mDist*m.sin(self.particles[k][2]) 
+				for k in range (len (self.particleArray) ):		
+					self.particleArray[k][0] = self.particleArray[k][0] + self.mDist*m.cos(self.particleArray[k][2])
+					self.particleArray[k][1] = self.particleArray[k][1] + self.mDist*m.sin(self.particleArray[k][2]) 
 					#why do we add noise only for the 1st move?	
+					
+
+					with open ("moveparticleslog.txt", 'a') as infile:
+						infile.write("mDist\n")
+						infile.write(str(self.mDist))
 					if i == 0:
-						self.particles[k][0] += random.guass(0, self.config["first_move_sigma_x"])
-						self.particles[k][1] += random.guass(0, self.config["first_move_sigma_y"])
-						self.particles[k][2] += random.guass(0, self.config["first_move_sigma_angle"])
+						self.particleArray[k][0] += random.gauss(0, self.config["first_move_sigma_x"])
+						self.particleArray[k][1] += random.gauss(0, self.config["first_move_sigma_y"])
+						self.particleArray[k][2] += random.gauss(0, self.config["first_move_sigma_angle"])
 			
 			self.poseArray.header.stamp = rospy.Time.now()
 			self.poseArray.header.frame_id = 'map'
 			#self.poseArray.poses = []
 			rospy.loginfo("logging errorsssso")	
-			for p in range(len (self.particles)): 	
-				self.pose = hf.get_pose(self.particle[p][0], self.particle[p][1], self.particle[p][2])
+			for p in range(len (self.particleArray)): 	
+				self.pose = hf.get_pose(self.particleArray[p][0], self.particleArray[p][1], self.particleArray[p][2])
 				#logging.debug('Msg %s ', str(self.particle[p][0]) )
 				self.poseArray.poses.append(self.pose)
-				self.particle[p][4] = self.pose
+				self.particleArray[p][4] = self.pose
 			
 			print ("particle publishing from timer")
 			
-			self.timer = rospy.Timer(rospy.Duration(0.1), self.publishParticles)
+			self.particlePublisher.publish(self.poseArray)
+			with open ("publishMP.txt", 'a') as infile:
+				infile.write("outside publishMP")
+			self.timer = rospy.Timer(rospy.Duration(0.1), self.publishMoveParticles)
         	
 
-	def publishParticles(self):
-		print ("particle publishing from timer")
+	def publishMoveParticles(self):
+		with open ("publishMP.txt", 'a') as infile:
+			infile.write("please write")
 		self.particlePublisher.publish(self.poseArray)
 
 
