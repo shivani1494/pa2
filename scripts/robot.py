@@ -139,6 +139,7 @@ class Robot():
 		self.angleMin = message.angle_min #what are these in radians?
 		self.increment = message.angle_increment		
 
+	#THIS FUNCITON NEEDS TO BE TESTED
 	#place all variables into the init fucntion
 	def weighParticles(self):
 		#----------------------------------------------------------------------
@@ -149,7 +150,7 @@ class Robot():
 		#so if we have 100 laser scan values, we have 100 Pz, one for each location
 		#laser scan P_z values-->horizontal-->PzArrayForParticleI array used below
 		#|___|____|____|____|___||#this for Particle i
-		#|___|____|____|____|___||all particles in the vertical
+		#|___|____|____|____|___||vertical: particles from 0 to n
 		#|___|____|____|____|___||
 		self.PzForAllParticles = []
 		for p in range ( len (self.particleArray)):
@@ -189,7 +190,7 @@ class Robot():
 			#calculate the new weight from the old weights
 			self.particleArray[m][3] *= totalPzForAllParticles[m]
 		
-	
+	#THIS FUNCTION NEEDS TO BE TESTED	
 	def moveParticles(self):	
 		self.moveList = self.config["move_list"]		
 		for i in range (len (self.moveList)):
