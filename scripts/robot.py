@@ -139,24 +139,69 @@ class Robot():
 		self.angleMin = message.angle_min #what are these in radians?
 		self.increment = message.angle_increment		
 
-	def weighParticlesGivenLaserReadings(self):
+	#place all variables into the init fucntion
+	def weighParticles(self):
+		#----------------------------------------------------------------------
+		#there are some edge cases: please take care of all edge cases I beg you!
+		#---------------------------------------------------------------------
+		#this is the a 2D array, every row corresponds to every particle
+		#every column corresponds to Pz values for every laser scan
+		#so if we have 100 laser scan values, we have 100 Pz, one for each location
+		#laser scan P_z values-->horizontal-->PzArrayForParticleI array used below
+		#|___|____|____|____|___||#this for Particle i
+		#|___|____|____|____|___||all particles in the vertical
+		#|___|____|____|____|___||
+		self.PzForAllParticles = []
+		for p in range ( len (self.particleArray)):
+			PzForParticleI = []	
+			for l in range ( len (self.laserVals) ):	
+				self.rLaserAngle = self.angle_min + l*self.increment
+				totalLaserAngle = self.particleArray[p][2] + self.rLaserAngle
+				corX = particleArray[p][0] + self.laserVals[l]*m.cos(totalLaserAngle) 		
+				corY = particleArray[p][1] + self.laserVals[l]*m.sin(totalLaserAngle) 	
 
-		for l in range ( len (self.laserVals)):
-			self.rLaserAngle = self.angle_min + l * self.increment
-			for p in range ( len (self.particles) ):	
-				totalLaserAngle = self.particle[p][2] + self.rLaserAngle
-				rangeX = particle[p][0] + self.laserVals[l]*m.cos(totalLaserAngle) 		
-				rangeY = particle[p][1] + self.laserVals[l]*m.sin(totalLaserAngle) 		
+				#this returns me the mid cell position
+				[x, y] = self.lMap.cell_position(corX, corY)
+				self.LP = self.lMap.get_cell(x, y)
+				#this gets me the P of that cell being an obstacle
+				#given my current pos what is the P that I hit the obstacle
+				if self.LP != float('nan'):
+					self.P_z = self.LP*self.config["laser_z_hit"] + self.config["laser_z_rand"]
+					PzForParticleI.append(self.P_z)
+
+			self.PzForAllParticles.append(PzForParticleI)#is this creating a deep copy?
+		
+
+		#we are calculating a good P_Z values by somehow summing up all the weights
+		#we got in Array PzForParticleI above
+		#this we must do over all particles	
+		#so here we use the cubes formula but this may change
+		self.totalPzForAllParticles = []
+		for i in range(len(PzForAllParticles)):
+			totalPzForParticleI = 1 
+			for j in range(len(self.PzForAllParticles[i])):		
+				totalPzForParticleI +=  probArray[i]*probArray[i]*probArray[i]
+				totalPzForAllParticles.append(totalPzForParticleI)
+
+		#next using the above totalPzfor each particle I must calculate the new weight
+		#for each particles and update the Particle array
+		for m in range ( len (self.totalPzForAllParticles) ):
+			#calculate the new weight from the old weights
+			self.particleArray[m][3] *= totalPzForAllParticles[m]
+		
+	
 	def moveParticles(self):	
 		self.moveList = self.config["move_list"]		
 		for i in range (len (self.moveList)):
-			
+				
 			self.mAngle = self.moveList[i][0]
 			self.mDist = self.moveList[i][1]
 			self.mSteps = self.moveList[i][2]
 
 			with open ("moveparticleslog.txt", 'a') as infile:
-				infile.write(str(self.moveList))
+				infile.write("making move: self.mAngle, self.mDist")
+				infile.write(str(self.mAngle))
+				infile.write("\n")
 			#move robot 
 			hf.move_function( m.radians( self.mAngle ), float(0.0)) 
 			#move the particles and add noise only for the first move	
@@ -167,15 +212,18 @@ class Robot():
 			#move particles
 			for j in range (self.mSteps):	
 				hf.move_function(0, self.mDist)
+
+				with open ("moveparticleslog.txt", 'a') as infile:
+					infile.write("making move: self.mDist")
+					infile.write(" ")
+					infile.write(str(self.mDist))
+					infile.write("\n")
+
 				for k in range (len (self.particleArray) ):		
 					self.particleArray[k][0] = self.particleArray[k][0] + self.mDist*m.cos(self.particleArray[k][2])
 					self.particleArray[k][1] = self.particleArray[k][1] + self.mDist*m.sin(self.particleArray[k][2]) 
 					#why do we add noise only for the 1st move?	
 					
-
-					with open ("moveparticleslog.txt", 'a') as infile:
-						infile.write("mDist\n")
-						infile.write(str(self.mDist))
 					if i == 0:
 						self.particleArray[k][0] += random.gauss(0, self.config["first_move_sigma_x"])
 						self.particleArray[k][1] += random.gauss(0, self.config["first_move_sigma_y"])
@@ -183,15 +231,12 @@ class Robot():
 			
 			self.poseArray.header.stamp = rospy.Time.now()
 			self.poseArray.header.frame_id = 'map'
-			#self.poseArray.poses = []
+			self.poseArray.poses = []
 			rospy.loginfo("logging errorsssso")	
 			for p in range(len (self.particleArray)): 	
 				self.pose = hf.get_pose(self.particleArray[p][0], self.particleArray[p][1], self.particleArray[p][2])
-				#logging.debug('Msg %s ', str(self.particle[p][0]) )
 				self.poseArray.poses.append(self.pose)
 				self.particleArray[p][4] = self.pose
-			
-			print ("particle publishing from timer")
 			
 			self.particlePublisher.publish(self.poseArray)
 			with open ("publishMP.txt", 'a') as infile:
