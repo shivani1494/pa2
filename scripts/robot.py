@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+from __future__ import division
 import logging
 from scipy import spatial
 from sklearn.neighbors import KDTree
@@ -25,11 +25,6 @@ class Robot():
 	def __init__(self):
 
 		rospy.init_node('Robot') 
-
-		#logging.basicConfig(filename='errorPrint.log',level=logging.DEBUG)
-		#a = 1
-		#logging.debug('This message should go to the log file %d', a)
-
 		self.config = read_config()
 		self.poseArray = None
 		rospy.Subscriber("/map", OccupancyGrid, self.handleMapMessage)
@@ -46,9 +41,15 @@ class Robot():
 		self.poseArray.header.frame_id = 'map'
 		self.poseArray.poses = []
 		self.increment = 0	
-		self.index = 0	
+		self.index = 0
+		self.first = 0	
 		self.laserVals = None	
 		self.map = None
+		self.newWeights = []	
+		self.mAngle = None
+		self.mDist = None 
+		self.mSteps = None
+
 		while self.map == None:
 			rospy.sleep(0.1)
 			
@@ -140,179 +141,189 @@ class Robot():
 		self.increment = message.angle_increment		
 
 	#THIS FUNCITON NEEDS TO BE TESTED
-	#place all variables into the init fucntion
 	def weighParticles(self):
 		#----------------------------------------------------------------------
-		#there are some edge cases: please take care of all edge cases I beg you!
+		#there are some edge cases: please take care of all edge cases
 		#---------------------------------------------------------------------
-		#this is the a 2D array, every row corresponds to a particle
-		#every column corresponds to Pz values for every laser scan
-		#so if we have 100 laser scan values, we have 100 Pz, one for each location
-		#laser scan P_z values-->horizontal-->PzArrayForParticleI array used below
-		#|___|____|____|____|___||#this for Particle i
-		#|___|____|____|____|___||vertical: particles from 0 to n
-		#|___|____|____|____|___||
+		self.newWeights = []
 		PzForAllParticles = []
 		for p in range ( len (self.particleArray)):
+
+			with open ("reweighlog.txt", 'a') as infile:
+				infile.write("value of p: ")
+				infile.write(str(p))
+				infile.write("\n")
 			PzForParticleI = []	
 			for l in range ( len (self.laserVals) ):	
-				self.rLaserAngle = self.angle_min + l*self.increment
+				self.rLaserAngle = self.angleMin + l*self.increment
 				totalLaserAngle = self.particleArray[p][2] + self.rLaserAngle
-				corX = particleArray[p][0] + self.laserVals[l]*m.cos(totalLaserAngle) 		
-				corY = particleArray[p][1] + self.laserVals[l]*m.sin(totalLaserAngle) 	
+				corX = self.particleArray[p][0] + self.laserVals[l] * m.cos(totalLaserAngle) 		
+				corY = self.particleArray[p][1] + self.laserVals[l] * m.sin(totalLaserAngle) 	
 
-				#this returns me the mid cell position
 				[x, y] = self.lMap.cell_position(corX, corY)
-				#particle that is maybe one of my belief is far off from a robots actual pos, so it can be the case that the laser scan value when appied to this particle leads to a corX,Y out of the Map, so then in that case the LP will be NaN
 
 				self.LP = self.lMap.get_cell(x, y)
-				#this gets me the P of that cell being an obstacle
-				#given my current pos what is the P that I hit the obstacle
-				#is it is a nan shouldn't we try setting the value to very low as well
-				#because it was a horrible belief of the robot and in that
-				#case we should try to make that particle's weight very low 
-				#but by ignoring we are literally not adding that in particle's
-				#weight so it is not going to account for such a pathtic val.
-				if !m.isNan(self.LP) :
+				
+				if self.LP == self.LP:
 					self.P_z = self.LP*self.config["laser_z_hit"] + self.config["laser_z_rand"]
-					PzForParticleI.append(self.P_z)
-
-			PzForAllParticles.append(PzForParticleI)#is this creating a deep copy?
-			with open ("reweighlog.txt", 'a') as infile:
-				infile.write("PzForAllParticles")
-				infile.write(str(PzForAllParticles))
-				infile.write("\n")
+					PzForParticleI.append(deepcopy(self.P_z))
+			PzForAllParticles.append(deepcopy(PzForParticleI))#is this creating a deep copy?
 			print ("PzForAllParticles")
-			print PzForAllParticles	
+			#print PzForAllParticles	
 
-		#we are calculating a good P_Z values by somehow summing up all the weights
-		#we got in Array PzForParticleI above
-		#this we must do over all particles	
-		#so here we use the cubes formula but this may change
+		#with open ("reweighlog.txt", 'a') as infile:
+			#infile.write("PzForAllParticles")
+			#infile.write(str(PzForAllParticles.ravel()))
+			#infile.write("\n")
+
 		self.totalPzForAllParticles = []
 		for i in range(len(PzForAllParticles)):
-			totalPzForParticleI = 1 
+			totalPzForParticleI = 0.0 
 			for j in range(len(PzForAllParticles[i])):		
 				totalPzForParticleI +=  PzForAllParticles[i][j]*PzForAllParticles[i][j]*PzForAllParticles[i][j]
-			self.totalPzForAllParticles.append(totalPzForParticleI)
+			self.totalPzForAllParticles.append(deepcopy(totalPzForParticleI))
 			
 		print (len (self.totalPzForAllParticles) )
-		with open ("reweighlog.txt", 'a') as infile:
-			infile.write("len (self.totalPzForAllParticles)")
-			infile.write( str(len (self.totalPzForAllParticles)) )
+
+		with open ("lengthlog.txt", 'a') as infile:
+			infile.write("self.totalPzForAllParticles")
+			infile.write(str(len(self.totalPzForAllParticles)))
 			infile.write("\n")
-		#next using the above totalPzfor each particle I must calculate the new weight
-		#for each particles and update the Particle array
-		for m in range ( len (self.totalPzForAllParticles) ):
+
+		for o in range ( len (self.totalPzForAllParticles) ):
 			#calculate the new weight from the old weights
-			self.particleArray[m][3] *= totalPzForAllParticles[m]
+			newW = 0.0
+			newW = self.particleArray[o][3]*self.totalPzForAllParticles[o]
+			self.particleArray[o][3] = deepcopy( newW )
+			with open ("lengthlog.txt", 'a') as infile:
+				infile.write("particleArray[o][3]:")
+				infile.write(str(self.particleArray[o][3]))
+				infile.write("\n")
+		self.normalizeWeights()
+
+	def normalizeWeights(self):		
 
 		normalizeWeight = 0.0	
 		for k in range (len (self.particleArray) ):	
-			self.particleArray[k][3] += normalizeWeight 
+			normalizeWeight += self.particleArray[k][3]
 		
-		self.newWeights = []
 		for k in range (len (self.particleArray) ):
-			self.particleArray[k][3] /= normalizeWeight
-			self.newWeights.append(self.particleArray[k][3])
+			newNormalW = 0.0
+			newNormalW = self.particleArray[k][3]/normalizeWeight
+			self.particleArray[k][3] = deepcopy(newNormalW)
+			self.newWeights.append(deepcopy( self.particleArray[k][3]) )
 
 	#how do set the weight to 0??
 	#particle goes out of the bounds because of the move step update right?	
 		for k in range (len(self.particleArray) ):
 			x = self.particleArray[k][0]
 			y = self.particleArray[k][1]
-			out = isNan(self.lMap.get_cell(x, y))
-			if out: 
+			temp = (self.lMap.get_cell(x, y))
+			if temp != temp: 
 				self.newWeights[k] = 0
-		#update particle weight in your particle array		
-		for k in range( len (self.particleArray) ):
-			self.particleArray[k][3] = self.newWeights[k]
+		self.resampleParticles()
 
-		#repeatParticles = []
-		#for l in range (len (self.newWeights) ):
-			#repeatP = self.newWeights[l]*800	
-			#m.ceil(repeatP)	
-			#repeatParticles.append(repeatP)
-
+	def resampleParticles(self):	
+	#print here for self.newWeights if these are actually added?
 		resampleArray = []
-		#for k in range ( len ( repeatParticles ) ): 
-			#for l in range ( repeatParticles[l]):
-				#resampleArray.append(k)
-		#this resample array has 1000 elements
-		#print resampleArray	
-		particleAdd = []
 
 		for r in range ( 800 ):
-			resampleP = np.random.choice(self.particleArray, 1, replace=True, self.newWeights)
-			particleAdd = self.particleArray[resampleP[0] ]	
-			resampleArray.append( particleAdd )	
-			if !resampleArray[r][3]:
+			particleAdd = []
+			resampleP = np.random.choice(800, 1, replace=True, p=self.newWeights)
+			particleAdd = self.particleArray[ resampleP[0] ]	
+			resampleArray.append( deepcopy(particleAdd) )	
+			if not resampleArray[r][3]:
 				with open ("reweighlog.txt", 'a') as infile:
 					infile.write("weight of 0 particle added ")
 					infile.write("\n")
 						
+			resampleArray[r][0] += random.gauss(0, self.config["resample_sigma_x"])
+			resampleArray[r][1] += random.gauss(0, self.config["resample_sigma_y"])
+			resampleArray[r][2] += random.gauss(0, self.config["resample_sigma_angle"])
+
 		with open ("reweighlog.txt", 'a') as infile:
 			infile.write("resample array")
 			infile.write( str(len (resampleArray) ) )
 			infile.write( str( (resampleArray) ) )
 			infile.write("\n")
 
-		self.particleArray = deepcopy(self.resampleArray)
+		self.particleArray = deepcopy(resampleArray)
 
+		#with open ("reweighlog.txt", 'a') as infile:
+			#infile.write("")
+			#infile.write( str(len (resampleArray) ) )
+			#infile.write( str( (resampleArray) ) )
+			#infile.write("\n")
 
+		#with open ("reweighlog.txt", 'a') as infile:
+			#infile.write("len (self.totalPzForAllParticles)")
+			#infile.write( str(len (self.totalPzForAllParticles)) )
+			#infile.write("\n")
+		#next using the above totalPzfor each particle I must calculate the new weight
+		#for each particles and update the Particle array
 
 	#THIS FUNCTION NEEDS TO BE TESTED	
 	def moveParticles(self):	
 		self.moveList = self.config["move_list"]	
 		for i in range (len (self.moveList)):
-				
+			self.first = i	
 			self.mAngle = self.moveList[i][0]
 			self.mDist = self.moveList[i][1]
 			self.mSteps = self.moveList[i][2]
 
 			with open ("moveparticleslog.txt", 'a') as infile:
-				infile.write("making move: self.mAngle")
+				infile.write("mDist:")
+				infile.write(str(self.mDist))
+				infile.write(str(self.mAngle))
 				infile.write(str(self.mAngle))
 				infile.write("\n")
-			#move robot 
+			#move robot by the angle 
 			hf.move_function( m.radians( self.mAngle ), float(0.0) ) 
-			#move the particles and add noise only for the first move	
+			#turn by angle, the particles and add noise only for the first move	
 			for p in range(len (self.particleArray)): 	
 				self.particleArray[p][2] += m.radians(self.mAngle)	
 				if i == 0:	
 					self.particleArray[p][2] += random.gauss(0, self.config["first_move_sigma_angle"])
-			#move particles
+			#move particles by m.Dist mStep times
 			for j in range (self.mSteps):	
-				hf.move_function(0, self.mDist)
+				hf.move_function(0.0, self.mDist)
+				if self.first == 0:
+					self.stepUpdate()
 
-				with open ("moveparticleslog.txt", 'a') as infile:
-					infile.write("making move: self.mDist")
-					infile.write(" ")
-					infile.write(str(self.mDist))
-					infile.write("\n")
-
-				for k in range (len (self.particleArray) ):		
-					self.particleArray[k][0] = self.particleArray[k][0] + self.mDist*m.cos(self.particleArray[k][2])
-					self.particleArray[k][1] = self.particleArray[k][1] + self.mDist*m.sin(self.particleArray[k][2]) 
-					#why do we add noise only for the 1st move?	
-					
-					if i == 0:
-						self.particleArray[k][0] += random.gauss(0, self.config["first_move_sigma_x"])
-						self.particleArray[k][1] += random.gauss(0, self.config["first_move_sigma_y"])
-						self.particleArray[k][2] += random.gauss(0, self.config["first_move_sigma_angle"])
+			with open ("moveparticleslog.txt", 'a') as infile:
+				infile.write("before entering the weigh particles fucntion")
+				infile.write("\n")	
+			if self.first == 0:
+				self.weighParticles()	
 			
-			#rospy.loginfo("logging errorsssso")	
 			self.poseArray.poses = []		
 			for p in range(len (self.particleArray)): 	
 				self.pose = hf.get_pose(self.particleArray[p][0], self.particleArray[p][1], self.particleArray[p][2])
 				self.poseArray.poses.append(self.pose)
 				self.particleArray[p][4] = self.pose
-			
-			self.particlePublisher.publish(self.poseArray)
+			if self.first == 0:	
+				self.particlePublisher.publish(self.poseArray)
 			with open ("publishMP.txt", 'a') as infile:
 				infile.write("outside publishMP")
 			#self.timer = rospy.Timer(rospy.Duration(0.1), self.publishMoveParticles)
         	
+	def stepUpdate(self):
+
+		with open ("moveparticleslog.txt", 'a') as infile:
+			infile.write("inside stepUpdate: making move: self.mDist")
+			infile.write(" ")
+			infile.write(str(self.mDist))
+			infile.write("\n")
+
+		for k in range (len (self.particleArray) ):		
+			self.particleArray[k][0] = self.particleArray[k][0] + self.mDist*m.cos(self.particleArray[k][2])
+			self.particleArray[k][1] = self.particleArray[k][1] + self.mDist*m.sin(self.particleArray[k][2]) 
+			#why do we add noise only for the 1st move?	
+			
+			if self.first  == 0:
+				self.particleArray[k][0] += random.gauss(0, self.config["first_move_sigma_x"])
+				self.particleArray[k][1] += random.gauss(0, self.config["first_move_sigma_y"])
+				self.particleArray[k][2] += random.gauss(0, self.config["first_move_sigma_angle"])
 
 	def publishMoveParticles(self):
 		with open ("publishMP.txt", 'a') as infile:
