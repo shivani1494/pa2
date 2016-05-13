@@ -203,6 +203,12 @@ class Robot():
 
 	def normalizeWeights(self):		
 
+		for k in range (len(self.particleArray) ):
+			x = self.particleArray[k][0]
+			y = self.particleArray[k][1]
+			temp = (self.lMap.get_cell(x, y))
+			if temp != temp: 
+				self.particleArray[k][3] = 0
 		normalizeWeight = 0.0	
 		for k in range (len (self.particleArray) ):	
 			normalizeWeight += self.particleArray[k][3]
@@ -215,12 +221,13 @@ class Robot():
 
 	#how do set the weight to 0??
 	#particle goes out of the bounds because of the move step update right?	
-		for k in range (len(self.particleArray) ):
-			x = self.particleArray[k][0]
-			y = self.particleArray[k][1]
-			temp = (self.lMap.get_cell(x, y))
-			if temp != temp: 
-				self.newWeights[k] = 0
+		summ = 0.0	
+		for n in range( len (self.newWeights) ):
+			summ += self.newWeights[n]
+		with open ("normalog.txt", 'a') as infile:
+			infile.write(str(summ))
+			infile.write("\n")
+		
 		self.resampleParticles()
 
 	def resampleParticles(self):	
@@ -287,22 +294,22 @@ class Robot():
 			#move particles by m.Dist mStep times
 			for j in range (self.mSteps):	
 				hf.move_function(0.0, self.mDist)
-				if self.first == 0:
-					self.stepUpdate()
+				#if self.first == 0:
+				self.stepUpdate()
 
 			with open ("moveparticleslog.txt", 'a') as infile:
 				infile.write("before entering the weigh particles fucntion")
 				infile.write("\n")	
-			if self.first == 0:
-				self.weighParticles()	
+			#if self.first == 0:
+			self.weighParticles()	
 			
 			self.poseArray.poses = []		
 			for p in range(len (self.particleArray)): 	
 				self.pose = hf.get_pose(self.particleArray[p][0], self.particleArray[p][1], self.particleArray[p][2])
 				self.poseArray.poses.append(self.pose)
 				self.particleArray[p][4] = self.pose
-			if self.first == 0:	
-				self.particlePublisher.publish(self.poseArray)
+			#if self.first == 0:	
+			self.particlePublisher.publish(self.poseArray)
 			with open ("publishMP.txt", 'a') as infile:
 				infile.write("outside publishMP")
 			#self.timer = rospy.Timer(rospy.Duration(0.1), self.publishMoveParticles)
