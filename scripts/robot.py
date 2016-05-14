@@ -19,7 +19,7 @@ from read_config import read_config
 from math import exp
 import map_utils as mu 
 import helper_functions as hf
-
+from std_msgs.msg import Bool
 class Robot():
 
 	def __init__(self):
@@ -34,6 +34,11 @@ class Robot():
 		rospy.Subscriber("/base_scan", LaserScan, self.handleLaserMessage)
 
 		self.lMapPublisher = rospy.Publisher("/likelihood_field", OccupancyGrid, queue_size=10, latch=True)
+		
+		self.resPub = rospy.Publisher("/result_update", Bool, queue_size=10)
+		
+		self.simPub = rospy.Publisher("/sim_complete", Bool, queue_size=10)
+		
 		self.particleArray = []
 		self.angleMin = 0
 		self.poseArray = PoseArray() 	
@@ -73,6 +78,10 @@ class Robot():
 
 		while not rospy.is_shutdown():
 			rospy.sleep(0.5)
+
+		simPub.publish(True)
+
+		rospy.signal_shutdown()
 
 	def handleMapMessage(self, message):
 	 	if self.index == 0:	
@@ -263,7 +272,9 @@ class Robot():
 			with open ("moveparticleslog.txt", 'a') as infile:
 				infile.write("before entering the weigh particles fucntion")
 				infile.write("\n")	
-			
+
+			resPub.publish(True)	
+
 			#self.weighParticles()
 			#self.poseArray.poses = []		
 			#for p in range(len (self.particleArray)): 	
