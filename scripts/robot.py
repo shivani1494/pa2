@@ -160,27 +160,17 @@ class Robot():
 		for p in range ( len (self.particleArray)):
 			PzForParticleI = []	
 			for l in range ( len (self.laserVals) ):	
-				if l % 10 == 0: 	
-					self.rLaserAngle = self.angleMin + l*self.increment
-					totalLaserAngle = self.particleArray[p][2] + self.rLaserAngle
-					corX = self.particleArray[p][0] + self.laserVals[l] * m.cos(totalLaserAngle) 		
-					corY = self.particleArray[p][1] + self.laserVals[l] * m.sin(totalLaserAngle) 	
-
-					[x, y] = self.lMap.cell_position(corX, corY)
-
-					self.LP = self.lMap.get_cell(x, y)
+				self.rLaserAngle = self.angleMin + l*self.increment
+				totalLaserAngle = self.particleArray[p][2] + self.rLaserAngle
+				corX = self.particleArray[p][0] + self.laserVals[l] * m.cos(totalLaserAngle) 		
+				corY = self.particleArray[p][1] + self.laserVals[l] * m.sin(totalLaserAngle) 	
+				self.LP = self.lMap.get_cell(corX, corY)
 				
-					if self.LP == self.LP:
-						self.P_z = self.LP*self.config["laser_z_hit"] + self.config["laser_z_rand"]
-						PzForParticleI.append(deepcopy(self.P_z))
+				if self.LP == self.LP:
+					self.P_z = self.LP*self.config["laser_z_hit"] + self.config["laser_z_rand"]
+					PzForParticleI.append(deepcopy(self.P_z))
 			PzForAllParticles.append(deepcopy(PzForParticleI))#is this creating a deep copy?
 			print ("PzForAllParticles")
-			#print PzForAllParticles	
-
-		#with open ("reweighlog.txt", 'a') as infile:
-			#infile.write("PzForAllParticles")
-			#infile.write(str(PzForAllParticles.ravel()))
-			#infile.write("\n")
 
 		self.totalPzForAllParticles = []
 		for i in range(len(PzForAllParticles)):
@@ -202,10 +192,6 @@ class Robot():
 			#newW = self.particleArray[o][3]*self.totalPzForAllParticles[o]
 			newW = self.particleArray[o][3]*(1/(1+exp(-self.totalPzForAllParticles[o])))
 			self.particleArray[o][3] = deepcopy( newW )
-			#with open ("lengthlog.txt", 'a') as infile:
-				#infile.write("particleArray[o][3]:")
-				#infile.write(str(self.particleArray[o][3]))
-				#infile.write("\n")
 		self.normalizeWeights()
 
 	def normalizeWeights(self):		
@@ -226,8 +212,6 @@ class Robot():
 			self.particleArray[k][3] = deepcopy(newNormalW)
 			self.newWeights.append(deepcopy( self.particleArray[k][3]) )
 
-	#how do set the weight to 0??
-	#particle goes out of the bounds because of the move step update right?	
 		self.resampleParticles()
 
 	def resampleParticles(self):	
@@ -244,9 +228,9 @@ class Robot():
 					infile.write("weight of 0 particle added ")
 					infile.write("\n")
 						
-			resampleArray[r][0] += random.gauss(0, 3*self.config["resample_sigma_x"])
-			resampleArray[r][1] += random.gauss(0, 3*self.config["resample_sigma_y"])
-			resampleArray[r][2] += random.gauss(0, 3*self.config["resample_sigma_angle"])
+			resampleArray[r][0] += random.gauss(0, self.config["resample_sigma_x"])
+			resampleArray[r][1] += random.gauss(0, self.config["resample_sigma_y"])
+			resampleArray[r][2] += random.gauss(0, self.config["resample_sigma_angle"])
 
 		with open ("resample.log", 'a') as infile:
 			infile.write("resample array")
@@ -259,7 +243,6 @@ class Robot():
 		#next using the above totalPzfor each particle I must calculate the new weight
 		#for each particles and update the Particle array
 
-	#THIS FUNCTION NEEDS TO BE TESTED	
 	def moveParticles(self):	
 		self.moveList = self.config["move_list"]	
 		for i in range (len (self.moveList)):
@@ -268,14 +251,8 @@ class Robot():
 			self.mDist = self.moveList[i][1]
 			self.mSteps = self.moveList[i][2]
 
-			with open ("moveparticleslog.txt", 'a') as infile:
-				infile.write("mDist:")
-				infile.write(str(self.mDist))
-				infile.write(str(self.mAngle))
-				infile.write(str(self.mAngle))
-				infile.write("\n")
 			#move robot by the angle 
-			hf.move_function( ( self.mAngle ), float(0.0) ) 
+			hf.move_function( self.mAngle, float(0.0) ) 
 			#turn by angle, the particles and add noise only for the first move	
 			for p in range(len (self.particleArray)): 	
 				self.particleArray[p][2] += m.radians(self.mAngle)	
@@ -299,8 +276,6 @@ class Robot():
 				#self.particleArray[p][4] = self.pose
 			#if self.first == 0:	
 			#self.particlePublisher.publish(self.poseArray)
-			with open ("publishMP.txt", 'a') as infile:
-				infile.write("outside publishMP")
 			#self.timer = rospy.Timer(rospy.Duration(0.1), self.publishMoveParticles)
         	
 	def stepUpdate(self):
@@ -325,10 +300,9 @@ class Robot():
 		self.poseArray.poses = []		
 		for p in range(len (self.particleArray)): 	
 			self.pose = hf.get_pose(self.particleArray[p][0], self.particleArray[p][1], self.particleArray[p][2])
-			self.poseArray.poses.append(self.pose)
+			self.poseArray.poses.append(deepcopy(self.pose))
 			self.particleArray[p][4] = self.pose
-			self.particlePublisher.publish(self.poseArray)
-
+		self.particlePublisher.publish(self.poseArray)
 	
 	def publishMoveParticles(self):
 		with open ("publishMP.txt", 'a') as infile:
