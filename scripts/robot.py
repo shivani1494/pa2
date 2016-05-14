@@ -73,15 +73,15 @@ class Robot():
 		rospy.sleep(0.1)	
 		
 		self.moveParticles()
-
 		rospy.sleep(0.1)	
-
-		while not rospy.is_shutdown():
-			rospy.sleep(0.5)
-
+		
 		simPub.publish(True)
 
-		rospy.signal_shutdown()
+		rospy.sleep(1)	
+
+		rospy.signal_shutdown(self)
+		
+
 
 	def handleMapMessage(self, message):
 	 	if self.index == 0:	
