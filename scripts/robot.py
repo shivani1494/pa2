@@ -93,9 +93,20 @@ class Robot():
 		self.numP = self.config["num_particles"]
 		for i in range(self.numP ):
 			#self.particle is an array 
+			self.particle = []
+					
+			m = np.random.uniform(0, self.map.width, 1)
+			j = np.random.uniform(0, self.map.height, 1)
+			[x, y] = self.map.cell_position(m, j) 
+			
+			while (self.map.get_cell(x,y) == 1):
+				m = np.random.uniform(0, self.map.width, 1)
+				j = np.random.uniform(0, self.map.height, 1)
+				[x, y] = self.map.cell_position(m, j) 
 				
-			self.particle = np.random.uniform(0, self.map.width, 1)
-			self.particle = np.append(self.particle, np.random.uniform(0, self.map.height, 1) )
+			self.particle = np.array(m) 
+			self.particle = np.append(self.particle, j)
+			
 			self.particle = np.append(self.particle, np.random.uniform(0, 6.28, 1) )
 		
 			self.particle = np.append(self.particle, np.array([1.0/800.0] ) )
@@ -104,7 +115,7 @@ class Robot():
 			self.poseArray.poses.append(self.pose)
 			self.particle = np.append(self.particle, np.array(self.pose))
 
-			self.particleArray.append(self.particle)
+			self.particleArray.append( deepcopy(self.particle) )
 		
 		print ("particle publishing")
 		self.particlePublisher.publish(self.poseArray)
@@ -140,7 +151,6 @@ class Robot():
 		self.angleMin = message.angle_min #what are these in radians?
 		self.increment = message.angle_increment		
 
-	#THIS FUNCITON NEEDS TO BE TESTED
 	def weighParticles(self):
 		#----------------------------------------------------------------------
 		#there are some edge cases: please take care of all edge cases
@@ -148,25 +158,21 @@ class Robot():
 		self.newWeights = []
 		PzForAllParticles = []
 		for p in range ( len (self.particleArray)):
-
-			with open ("reweighlog.txt", 'a') as infile:
-				infile.write("value of p: ")
-				infile.write(str(p))
-				infile.write("\n")
 			PzForParticleI = []	
 			for l in range ( len (self.laserVals) ):	
-				self.rLaserAngle = self.angleMin + l*self.increment
-				totalLaserAngle = self.particleArray[p][2] + self.rLaserAngle
-				corX = self.particleArray[p][0] + self.laserVals[l] * m.cos(totalLaserAngle) 		
-				corY = self.particleArray[p][1] + self.laserVals[l] * m.sin(totalLaserAngle) 	
+				if l % 10 == 0: 	
+					self.rLaserAngle = self.angleMin + l*self.increment
+					totalLaserAngle = self.particleArray[p][2] + self.rLaserAngle
+					corX = self.particleArray[p][0] + self.laserVals[l] * m.cos(totalLaserAngle) 		
+					corY = self.particleArray[p][1] + self.laserVals[l] * m.sin(totalLaserAngle) 	
 
-				[x, y] = self.lMap.cell_position(corX, corY)
+					[x, y] = self.lMap.cell_position(corX, corY)
 
-				self.LP = self.lMap.get_cell(x, y)
+					self.LP = self.lMap.get_cell(x, y)
 				
-				if self.LP == self.LP:
-					self.P_z = self.LP*self.config["laser_z_hit"] + self.config["laser_z_rand"]
-					PzForParticleI.append(deepcopy(self.P_z))
+					if self.LP == self.LP:
+						self.P_z = self.LP*self.config["laser_z_hit"] + self.config["laser_z_rand"]
+						PzForParticleI.append(deepcopy(self.P_z))
 			PzForAllParticles.append(deepcopy(PzForParticleI))#is this creating a deep copy?
 			print ("PzForAllParticles")
 			#print PzForAllParticles	
@@ -193,16 +199,23 @@ class Robot():
 		for o in range ( len (self.totalPzForAllParticles) ):
 			#calculate the new weight from the old weights
 			newW = 0.0
-			newW = self.particleArray[o][3]*self.totalPzForAllParticles[o]
+			#newW = self.particleArray[o][3]*self.totalPzForAllParticles[o]
+			newW = self.particleArray[o][3]*(1/(1+exp(-self.totalPzForAllParticles[o])))
 			self.particleArray[o][3] = deepcopy( newW )
-			with open ("lengthlog.txt", 'a') as infile:
-				infile.write("particleArray[o][3]:")
-				infile.write(str(self.particleArray[o][3]))
-				infile.write("\n")
+			#with open ("lengthlog.txt", 'a') as infile:
+				#infile.write("particleArray[o][3]:")
+				#infile.write(str(self.particleArray[o][3]))
+				#infile.write("\n")
 		self.normalizeWeights()
 
 	def normalizeWeights(self):		
 
+		for k in range (len(self.particleArray) ):
+			x = self.particleArray[k][0]
+			y = self.particleArray[k][1]
+			temp = (self.map.get_cell(x, y))
+			if temp != temp or temp == 1.0: 
+				self.particleArray[k][3] = 0
 		normalizeWeight = 0.0	
 		for k in range (len (self.particleArray) ):	
 			normalizeWeight += self.particleArray[k][3]
@@ -215,12 +228,6 @@ class Robot():
 
 	#how do set the weight to 0??
 	#particle goes out of the bounds because of the move step update right?	
-		for k in range (len(self.particleArray) ):
-			x = self.particleArray[k][0]
-			y = self.particleArray[k][1]
-			temp = (self.lMap.get_cell(x, y))
-			if temp != temp: 
-				self.newWeights[k] = 0
 		self.resampleParticles()
 
 	def resampleParticles(self):	
@@ -233,32 +240,22 @@ class Robot():
 			particleAdd = self.particleArray[ resampleP[0] ]	
 			resampleArray.append( deepcopy(particleAdd) )	
 			if not resampleArray[r][3]:
-				with open ("reweighlog.txt", 'a') as infile:
+				with open ("weigh0log.txt", 'a') as infile:
 					infile.write("weight of 0 particle added ")
 					infile.write("\n")
 						
-			resampleArray[r][0] += random.gauss(0, self.config["resample_sigma_x"])
-			resampleArray[r][1] += random.gauss(0, self.config["resample_sigma_y"])
-			resampleArray[r][2] += random.gauss(0, self.config["resample_sigma_angle"])
+			resampleArray[r][0] += random.gauss(0, 3*self.config["resample_sigma_x"])
+			resampleArray[r][1] += random.gauss(0, 3*self.config["resample_sigma_y"])
+			resampleArray[r][2] += random.gauss(0, 3*self.config["resample_sigma_angle"])
 
-		with open ("reweighlog.txt", 'a') as infile:
+		with open ("resample.log", 'a') as infile:
 			infile.write("resample array")
 			infile.write( str(len (resampleArray) ) )
+			infile.write("\n")
 			infile.write( str( (resampleArray) ) )
 			infile.write("\n")
 
 		self.particleArray = deepcopy(resampleArray)
-
-		#with open ("reweighlog.txt", 'a') as infile:
-			#infile.write("")
-			#infile.write( str(len (resampleArray) ) )
-			#infile.write( str( (resampleArray) ) )
-			#infile.write("\n")
-
-		#with open ("reweighlog.txt", 'a') as infile:
-			#infile.write("len (self.totalPzForAllParticles)")
-			#infile.write( str(len (self.totalPzForAllParticles)) )
-			#infile.write("\n")
 		#next using the above totalPzfor each particle I must calculate the new weight
 		#for each particles and update the Particle array
 
@@ -278,7 +275,7 @@ class Robot():
 				infile.write(str(self.mAngle))
 				infile.write("\n")
 			#move robot by the angle 
-			hf.move_function( m.radians( self.mAngle ), float(0.0) ) 
+			hf.move_function( ( self.mAngle ), float(0.0) ) 
 			#turn by angle, the particles and add noise only for the first move	
 			for p in range(len (self.particleArray)): 	
 				self.particleArray[p][2] += m.radians(self.mAngle)	
@@ -287,22 +284,21 @@ class Robot():
 			#move particles by m.Dist mStep times
 			for j in range (self.mSteps):	
 				hf.move_function(0.0, self.mDist)
-				if self.first == 0:
-					self.stepUpdate()
+				#if self.first == 0:
+				self.stepUpdate()
 
 			with open ("moveparticleslog.txt", 'a') as infile:
 				infile.write("before entering the weigh particles fucntion")
 				infile.write("\n")	
-			if self.first == 0:
-				self.weighParticles()	
 			
-			self.poseArray.poses = []		
-			for p in range(len (self.particleArray)): 	
-				self.pose = hf.get_pose(self.particleArray[p][0], self.particleArray[p][1], self.particleArray[p][2])
-				self.poseArray.poses.append(self.pose)
-				self.particleArray[p][4] = self.pose
-			if self.first == 0:	
-				self.particlePublisher.publish(self.poseArray)
+			#self.weighParticles()
+			#self.poseArray.poses = []		
+			#for p in range(len (self.particleArray)): 	
+				#self.pose = hf.get_pose(self.particleArray[p][0], self.particleArray[p][1], self.particleArray[p][2])
+				#self.poseArray.poses.append(self.pose)
+				#self.particleArray[p][4] = self.pose
+			#if self.first == 0:	
+			#self.particlePublisher.publish(self.poseArray)
 			with open ("publishMP.txt", 'a') as infile:
 				infile.write("outside publishMP")
 			#self.timer = rospy.Timer(rospy.Duration(0.1), self.publishMoveParticles)
@@ -325,6 +321,15 @@ class Robot():
 				self.particleArray[k][1] += random.gauss(0, self.config["first_move_sigma_y"])
 				self.particleArray[k][2] += random.gauss(0, self.config["first_move_sigma_angle"])
 
+		self.weighParticles()
+		self.poseArray.poses = []		
+		for p in range(len (self.particleArray)): 	
+			self.pose = hf.get_pose(self.particleArray[p][0], self.particleArray[p][1], self.particleArray[p][2])
+			self.poseArray.poses.append(self.pose)
+			self.particleArray[p][4] = self.pose
+			self.particlePublisher.publish(self.poseArray)
+
+	
 	def publishMoveParticles(self):
 		with open ("publishMP.txt", 'a') as infile:
 			infile.write("inside the publish Move particles fucntion")
