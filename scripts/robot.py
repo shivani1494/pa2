@@ -138,7 +138,7 @@ class Robot():
 		self.laserStdDev = self.config["laser_sigma_hit"]
 		constant = 1.0/( m.sqrt( 2 * m.pi) * self.laserStdDev )
 		eExp = np.exp(-0.5*( dists**2  )/( self.laserStdDev**2 ) )
-		probObsGivenLaser = constant * eExp
+		probObsGivenLaser = eExp
 		self.lMap.grid = probObsGivenLaser.reshape(self.lMap.grid.shape) 
 
 		self.occupancyGridMsg = self.lMap.to_message()		
