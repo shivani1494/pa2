@@ -75,7 +75,7 @@ class Robot():
 		self.moveParticles()
 		rospy.sleep(0.1)	
 		
-		simPub.publish(True)
+		self.simPub.publish(True)
 
 		rospy.sleep(1)	
 
@@ -273,7 +273,7 @@ class Robot():
 				infile.write("before entering the weigh particles fucntion")
 				infile.write("\n")	
 
-			resPub.publish(True)	
+			self.resPub.publish(True)	
 
 			#self.weighParticles()
 			#self.poseArray.poses = []		
