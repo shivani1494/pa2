@@ -44,13 +44,13 @@ class Robot():
 		self.index = 0
 		self.first = 0	
 		self.laserVals = None	
-		self.map = None
+		self.mmap = None
 		self.newWeights = []	
 		self.mAngle = None
 		self.mDist = None 
 		self.mSteps = None
 
-		while self.map == None:
+		while self.mmap == None:
 			rospy.sleep(0.1)
 			
 		self.initializeParticles()
@@ -76,12 +76,12 @@ class Robot():
 
 	def handleMapMessage(self, message):
 	 	if self.index == 0:	
-			self.map = mu.Map(message)
+			self.mmap = mu.Map(message)
 
-			print self.map.grid 
-			print self.map.cell_position(0, 0) 
+			print self.mmap.grid 
+			print self.mmap.cell_position(0, 0) 
 
-			self.lMap = deepcopy(self.map) #how to make a deep copy????
+			self.lMap = deepcopy(self.mmap) #how to make a deep copy????
 			#self.lMapPublisher.publish(self.lMap.to_message())
 			self.index = self.index + 1
 
@@ -95,14 +95,14 @@ class Robot():
 			#self.particle is an array 
 			self.particle = []
 					
-			m = np.random.uniform(0, self.map.width, 1)
-			j = np.random.uniform(0, self.map.height, 1)
-			[x, y] = self.map.cell_position(m, j) 
+			m = np.random.uniform(0, self.mmap.width, 1)
+			j = np.random.uniform(0, self.mmap.height, 1)
+			[x, y] = self.mmap.cell_position(m, j) 
 			
-			while (self.map.get_cell(x,y) == 1):
-				m = np.random.uniform(0, self.map.width, 1)
-				j = np.random.uniform(0, self.map.height, 1)
-				[x, y] = self.map.cell_position(m, j) 
+			while (self.mmap.get_cell(x,y) == 1):
+				m = np.random.uniform(0, self.mmap.width, 1)
+				j = np.random.uniform(0, self.mmap.height, 1)
+				[x, y] = self.mmap.cell_position(m, j) 
 				
 			self.particle = np.array(m) 
 			self.particle = np.append(self.particle, j)
@@ -124,13 +124,13 @@ class Robot():
 		self.obstacleArray = []
 		self.allPositions = []	
 		#build your obstacle array 
-		for i in range( len(self.map.grid) ):	
-			for j in range( len(self.map.grid[0])):	
-				[x, y] = self.map.cell_position(i, j) 
-				if self.map.get_cell(x,y) == 1.0:
-					self.obstacleArray.append(np.array(self.map.cell_position(i, j))) 
+		for i in range( len(self.mmap.grid) ):	
+			for j in range( len(self.mmap.grid[0])):	
+				[x, y] = self.mmap.cell_position(i, j) 
+				if self.mmap.get_cell(x,y) == 1.0:
+					self.obstacleArray.append(np.array(self.mmap.cell_position(i, j))) 
 					#print self.map.cell_position(i, j)	
-				self.allPositions.append(np.array(self.map.cell_position(i, j)))  
+				self.allPositions.append(np.array(self.mmap.cell_position(i, j)))  
 		#pass it into kdtree
 		eExp = []
 	
@@ -195,11 +195,10 @@ class Robot():
 		self.normalizeWeights()
 
 	def normalizeWeights(self):		
-
 		for k in range (len(self.particleArray) ):
 			x = self.particleArray[k][0]
 			y = self.particleArray[k][1]
-			temp = (self.map.get_cell(x, y))
+			temp = (self.mmap.get_cell(x, y))
 			if temp != temp or temp == 1.0: 
 				self.particleArray[k][3] = 0
 		normalizeWeight = 0.0	
@@ -217,7 +216,6 @@ class Robot():
 	def resampleParticles(self):	
 	#print here for self.newWeights if these are actually added?
 		resampleArray = []
-
 		for r in range ( 800 ):
 			particleAdd = []
 			resampleP = np.random.choice(800, 1, replace=True, p=self.newWeights)
@@ -240,8 +238,6 @@ class Robot():
 			infile.write("\n")
 
 		self.particleArray = deepcopy(resampleArray)
-		#next using the above totalPzfor each particle I must calculate the new weight
-		#for each particles and update the Particle array
 
 	def moveParticles(self):	
 		self.moveList = self.config["move_list"]	
@@ -256,8 +252,8 @@ class Robot():
 			#turn by angle, the particles and add noise only for the first move	
 			for p in range(len (self.particleArray)): 	
 				self.particleArray[p][2] += m.radians(self.mAngle)	
-				if i == 0:	
-					self.particleArray[p][2] += random.gauss(0, self.config["first_move_sigma_angle"])
+				#if i == 0:	
+					#self.particleArray[p][2] += random.gauss(0, self.config["first_move_sigma_angle"])
 			#move particles by m.Dist mStep times
 			for j in range (self.mSteps):	
 				hf.move_function(0.0, self.mDist)
@@ -289,12 +285,17 @@ class Robot():
 		for k in range (len (self.particleArray) ):		
 			self.particleArray[k][0] = self.particleArray[k][0] + self.mDist*m.cos(self.particleArray[k][2])
 			self.particleArray[k][1] = self.particleArray[k][1] + self.mDist*m.sin(self.particleArray[k][2]) 
-			#why do we add noise only for the 1st move?	
-			
 			if self.first  == 0:
 				self.particleArray[k][0] += random.gauss(0, self.config["first_move_sigma_x"])
 				self.particleArray[k][1] += random.gauss(0, self.config["first_move_sigma_y"])
 				self.particleArray[k][2] += random.gauss(0, self.config["first_move_sigma_angle"])
+		
+		for k in range (len(self.particleArray) ):
+			x = self.particleArray[k][0]
+			y = self.particleArray[k][1]
+			temp = self.mmap.get_cell(x, y)
+			if temp != temp or temp == 1.0: 
+				self.particleArray[k][3] = 0
 
 		self.weighParticles()
 		self.poseArray.poses = []		
