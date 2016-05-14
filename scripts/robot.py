@@ -204,12 +204,6 @@ class Robot():
 		self.normalizeWeights()
 
 	def normalizeWeights(self):		
-		for k in range (len(self.particleArray) ):
-			x = self.particleArray[k][0]
-			y = self.particleArray[k][1]
-			temp = (self.mmap.get_cell(x, y))
-			if temp != temp or temp == 1.0: 
-				self.particleArray[k][3] = 0
 		normalizeWeight = 0.0	
 		for k in range (len (self.particleArray) ):	
 			normalizeWeight += self.particleArray[k][3]
@@ -316,10 +310,6 @@ class Robot():
 			self.particleArray[p][4] = self.pose
 		self.particlePublisher.publish(self.poseArray)
 	
-	def publishMoveParticles(self):
-		with open ("publishMP.txt", 'a') as infile:
-			infile.write("inside the publish Move particles fucntion")
-		self.particlePublisher.publish(self.poseArray)
 
 
 if __name__ == '__main__':
