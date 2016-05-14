@@ -27,6 +27,7 @@ class Robot():
 		rospy.init_node('Robot') 
 		self.config = read_config()
 		self.poseArray = None
+		random.seed(0)
 		rospy.Subscriber("/map", OccupancyGrid, self.handleMapMessage)
 
 		self.particlePublisher = rospy.Publisher("/particlecloud", PoseArray, queue_size=10, latch=True)
